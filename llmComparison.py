@@ -64,19 +64,33 @@ uploaded_file = st.file_uploader("Upload CSV", type="csv",
 
 if uploaded_file:
     try:
-        df = pd.read_csv(uploaded_file)
+        # Add encoding and quote character handling
+        df = pd.read_csv(uploaded_file, 
+                        encoding='utf-8-sig',  # Handles BOM markers
+                        quotechar='"',         # Explicit quote character
+                        on_bad_lines='warn')   # Warn on malformed rows
         
-        # Normalize column names
-        df.columns = df.columns.str.strip().str.lower()
+        # Enhanced column normalization
+        df.columns = (df.columns.str.strip()          # Remove whitespace
+                     .str.lower()                     # Convert to lowercase
+                     .str.replace(r'\W+', '_', regex=True))  # Replace special chars
         
-        # Validate required columns
-        if 'feedback' not in df.columns:
-            st.error(f"❌ Missing required 'feedback' column. Found columns: {', '.join(df.columns)}")
+        # Check for feedback column variations
+        feedback_col = next((col for col in df.columns if 'feedback' in col), None)
+        
+        if not feedback_col:
+            st.error(f"""❌ Missing feedback column. Found columns: 
+                     {', '.join(df.columns)}""")
             st.stop()
             
         if df.empty:
             st.warning("⚠️ Uploaded file is empty")
             st.stop()
+
+        # Clean feedback data
+        df[feedback_col] = (df[feedback_col].astype(str)
+                           .str.strip()
+                           .str.replace(r'^"+|"+$', '', regex=True))  # Remove surrounding quotes
 
         st.subheader("Sample Data Preview")
         st.dataframe(df.head(3))
@@ -86,7 +100,7 @@ if uploaded_file:
             results = {}
 
             # Get cleaned feedback texts
-            feedback_texts = df['feedback'].astype(str).str.strip()
+            feedback_texts = df[feedback_col]
             empty_feedback = feedback_texts[feedback_texts == '']
             
             if not empty_feedback.empty:
@@ -106,7 +120,10 @@ if uploaded_file:
             st.subheader("Sentiment Distribution Comparison")
             try:
                 sentiment_data = pd.DataFrame({
-                    model: [res.split('\n')[0].split(': ')[1] for res in results[model]]
+                    model: [res.split('\n')[0].split(': ')[1] 
+                           if ':' in res.split('\n')[0] 
+                           else 'Unknown' 
+                           for res in results[model]]
                     for model in model_order
                 })
                 
@@ -131,7 +148,7 @@ if uploaded_file:
                 with col2:
                     st.write("**Top Improvement Areas**")
                     st.write(results[model_choice][0].split('\n')[2].strip())
-            except IndexError:
+            except (IndexError, AttributeError):
                 st.error("Could not parse model response. Check analysis output format.")
 
             # Comparison Table
