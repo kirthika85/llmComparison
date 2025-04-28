@@ -71,7 +71,7 @@ if uploaded_file:
         
         # Validate required columns
         if 'feedback' not in df.columns:
-            st.error(f"❌ Missing required 'Feedback' column. Found columns: {', '.join(df.columns)}")
+            st.error(f"❌ Missing required 'feedback' column. Found columns: {', '.join(df.columns)}")
             st.stop()
             
         if df.empty:
