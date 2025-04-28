@@ -1,0 +1,6 @@
+streamlit
+transformers
+pandas
+openai
+google-generativeai
+plotly
