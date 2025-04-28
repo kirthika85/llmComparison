@@ -60,7 +60,7 @@ def analyze_sentiment(text, model, model_type):
 # Streamlit UI
 st.title("Multi-LLM Sentiment Analysis Dashboard")
 uploaded_file = st.file_uploader("Upload CSV", type="csv", 
-                               help="Upload a CSV file with a 'Feedback' column")
+                               help="Upload a CSV file with a 'feedback' column")
 
 if uploaded_file:
     try:
