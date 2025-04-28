@@ -4,3 +4,4 @@ pandas
 openai
 google-generativeai
 plotly
+accelerate
