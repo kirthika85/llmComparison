@@ -15,7 +15,7 @@ def init_models():
         "GPT-3.5": openai_client,
         "GPT-4 Mini": openai_client,
         "Gemini 1.5": genai.GenerativeModel('gemini-1.5-flash'),
-        "Gemini 2.0": genai.GenerativeModel('gemini-2.0-flash')
+        "Gemini 2.0" Flash: genai.GenerativeModel('gemini-2.0-flash')
     }
 
 def parse_response(response):
@@ -73,7 +73,7 @@ def analyze_sentiment(text, model, model_type):
             )
             return response.choices[0].message.content
 
-        elif model_type in ["Gemini 1.5", "Gemini 2.0"]:
+        elif model_type in ["Gemini 1.5", "Gemini 2.0 Flash"]:
             response = model.generate_content(
                 f"""Analyze sentiment and extract:
                 - Sentiment classification
