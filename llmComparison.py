@@ -63,7 +63,7 @@ def analyze_sentiment(text, model, model_type):
             model_name = {
                 "GPT-4": "gpt-4",
                 "GPT-3.5": "gpt-3.5-turbo",
-                "GPT-4 Mini": "gpt-4-omni-mini"
+                "GPT-4 Mini": "gpt-4o-mini"
             }[model_type]
             
             response = model.chat.completions.create(
@@ -79,7 +79,7 @@ def analyze_sentiment(text, model, model_type):
             return response.choices[0].message.content
 
         elif model_type == "Gemini 2.0":
-            gemini_model = genai.GenerativeModel('gemini-2.0-pro')
+            gemini_model = genai.GenerativeModel('gemini-2.0-flash')
             response = gemini_model.generate_content(
                 f"""Analyze sentiment and extract:
                 - Sentiment classification
