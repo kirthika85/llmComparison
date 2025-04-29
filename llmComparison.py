@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+from collections import defaultdict
 from openai import OpenAI
 import google.generativeai as genai
 import plotly.express as px
@@ -16,17 +17,45 @@ def init_models():
         "Gemini 2.0": genai
     }
 
-def parse_sentiment(response):
-    """Extract sentiment from model response"""
+def parse_response(response):
+    """Extract components from model response"""
+    result = {
+        'sentiment': 'Unknown',
+        'positives': [],
+        'improvements': []
+    }
+    
     try:
-        first_line = response.split('\n')[0]
-        if ':' in first_line:
-            return first_line.split(':')[-1].strip().capitalize()
-        if 'classification' in first_line.lower():
-            return first_line.split('-')[-1].strip().capitalize()
-        return 'Unknown'
-    except:
-        return 'Unknown'
+        lines = [line.strip() for line in response.split('\n') if line.strip()]
+        
+        # Extract sentiment from first line
+        first_line = lines[0].lower()
+        if 'positive' in first_line:
+            result['sentiment'] = 'Positive'
+        elif 'negative' in first_line:
+            result['sentiment'] = 'Negative'
+        elif 'neutral' in first_line:
+            result['sentiment'] = 'Neutral'
+        
+        # Extract positives and improvements
+        section = None
+        for line in lines[1:]:
+            line_lower = line.lower()
+            if 'positive' in line_lower or 'good' in line_lower:
+                section = 'positives'
+            elif 'improvement' in line_lower or 'areas' in line_lower:
+                section = 'improvements'
+            elif section and line.startswith(('- ', '* ', '• ', '1.', '2.', '3.')):
+                clean_line = line.split('. ')[-1].strip()
+                if section == 'positives':
+                    result['positives'].append(clean_line)
+                else:
+                    result['improvements'].append(clean_line)
+    
+    except Exception as e:
+        st.error(f"Parsing error: {str(e)}")
+    
+    return result
 
 def analyze_sentiment(text, model, model_type):
     try:
@@ -43,8 +72,8 @@ def analyze_sentiment(text, model, model_type):
                     "role": "system", 
                     "content": """Analyze sentiment and extract:
                     1. Sentiment classification (Positive/Negative/Neutral)
-                    2. Top 3 positive aspects
-                    3. Top 3 improvement areas"""
+                    2. Top 5 positive aspects
+                    3. Top 5 improvement areas"""
                 }, {"role": "user", "content": text}]
             )
             return response.choices[0].message.content
@@ -54,8 +83,8 @@ def analyze_sentiment(text, model, model_type):
             response = gemini_model.generate_content(
                 f"""Analyze sentiment and extract:
                 - Sentiment classification
-                - Top 3 positive aspects
-                - Top 3 improvement areas from: {text}"""
+                - Top 5 positive aspects
+                - Top 5 improvement areas from: {text}"""
             )
             return response.text
 
@@ -102,93 +131,77 @@ if uploaded_file:
             model_order = ["GPT-4", "GPT-3.5", "GPT-4 Mini", "Gemini 2.0"]
             
             # Store all results
-            analysis_results = []
-            sentiment_data = {model: [] for model in model_order}
+            analysis_data = {model: {'sentiments': [], 'positives': [], 'improvements': []} 
+                           for model in model_order}
             
             with st.status("Analyzing feedback...", expanded=True) as status:
                 for model_name in model_order:
                     st.write(f"**Processing {model_name}**")
-                    model_responses = []
-                    sentiments = []
                     
                     for text in df[feedback_col]:
                         response = analyze_sentiment(text, models[model_name], model_name)
-                        model_responses.append(response)
-                        sentiments.append(parse_sentiment(response))
-                    
-                    sentiment_data[model_name] = sentiments
-                    
-                    # Store detailed results
-                    analysis_results.append({
-                        "Model": model_name,
-                        "Responses": model_responses,
-                        "Sentiments": sentiments
-                    })
+                        parsed = parse_response(response)
+                        
+                        analysis_data[model_name]['sentiments'].append(parsed['sentiment'])
+                        analysis_data[model_name]['positives'].extend(parsed['positives'])
+                        analysis_data[model_name]['improvements'].extend(parsed['improvements'])
                 
                 status.update(label="Analysis complete!", state="complete")
 
-            # Calculate metrics
-            metrics = []
-            total = len(df)
+            # Calculate metrics and top aspects
+            results = []
             for model in model_order:
-                sentiments = sentiment_data[model]
-                counts = {
-                    "Positive": sum(1 for s in sentiments if s == "Positive"),
-                    "Negative": sum(1 for s in sentiments if s == "Negative"),
-                    "Neutral": sum(1 for s in sentiments if s == "Neutral"),
-                    "Unknown": sum(1 for s in sentiments if s == "Unknown")
-                }
+                # Sentiment percentages
+                total = len(df)
+                sentiments = analysis_data[model]['sentiments']
+                pos = sum(1 for s in sentiments if s == 'Positive')
+                neg = sum(1 for s in sentiments if s == 'Negative')
+                neu = sum(1 for s in sentiments if s == 'Neutral')
                 
-                metrics.append({
+                # Top aspects
+                pos_counter = defaultdict(int)
+                for aspect in analysis_data[model]['positives']:
+                    if aspect: pos_counter[aspect] += 1
+                
+                imp_counter = defaultdict(int)
+                for aspect in analysis_data[model]['improvements']:
+                    if aspect: imp_counter[aspect] += 1
+                
+                # Get top 5
+                top_pos = sorted(pos_counter.items(), key=lambda x: x[1], reverse=True)[:5]
+                top_imp = sorted(imp_counter.items(), key=lambda x: x[1], reverse=True)[:5]
+                
+                results.append({
                     "Model": model,
-                    "Positive (%)": (counts["Positive"]/total)*100,
-                    "Negative (%)": (counts["Negative"]/total)*100,
-                    "Neutral (%)": (counts["Neutral"]/total)*100,
-                    "Unknown (%)": (counts["Unknown"]/total)*100,
-                    "Avg Response Time": "2.4s"  # Replace with actual timing if available
+                    "Positive%": f"{(pos/total)*100:.1f}%",
+                    "Negative%": f"{(neg/total)*100:.1f}%",
+                    "Neutral%": f"{(neu/total)*100:.1f}%",
+                    "Top Positives": "\n".join([f"- {k} ({v})" for k,v in top_pos]),
+                    "Top Improvements": "\n".join([f"- {k} ({v})" for k,v in top_imp])
                 })
 
-            # Display metrics table
-            st.subheader("Model Performance Metrics")
-            metrics_df = pd.DataFrame(metrics).set_index("Model")
+            # Display results table
+            st.subheader("Model Comparison Results")
+            results_df = pd.DataFrame(results).set_index("Model")
             st.dataframe(
-                metrics_df.style.format({
-                    'Positive (%)': '{:.1f}%',
-                    'Negative (%)': '{:.1f}%',
-                    'Neutral (%)': '{:.1f}%',
-                    'Unknown (%)': '{:.1f}%'
+                results_df.style.set_properties(**{
+                    'white-space': 'pre-wrap',
+                    'text-align': 'left'
                 }),
+                height=400,
                 use_container_width=True
             )
 
-            # Detailed results table
-            st.subheader("Detailed Analysis Results")
-            detailed_df = pd.DataFrame({
-                "Feedback": df[feedback_col],
-                **{f"{model} Sentiment": sentiment_data[model] for model in model_order}
-            })
-            st.dataframe(detailed_df, height=300)
-
             # Visualization
             st.subheader("Sentiment Distribution Comparison")
-            fig = px.bar(pd.DataFrame(sentiment_data).apply(pd.Series.value_counts), 
-                       barmode='group',
-                       labels={'value': 'Count', 'variable': 'Model'},
-                       title="Sentiment Distribution by Model")
+            fig = px.bar(
+                pd.DataFrame({model: analysis_data[model]['sentiments'] for model in model_order})
+                .apply(pd.Series.value_counts, normalize=True).T*100,
+                labels={'value': 'Percentage', 'variable': 'Sentiment'},
+                title="Sentiment Distribution by Model (%)",
+                barmode='group'
+            )
             st.plotly_chart(fig)
-
-            # Model comparison
-            st.subheader("Model Comparison")
-            col1, col2 = st.columns(2)
-            with col1:
-                st.write("**Most Positive Model**")
-                most_positive = metrics_df["Positive (%)"].idxmax()
-                st.metric(label=most_positive, value=f"{metrics_df.loc[most_positive, 'Positive (%)']:.1f}%")
-            
-            with col2:
-                st.write("**Most Critical Model**")
-                most_negative = metrics_df["Negative (%)"].idxmax()
-                st.metric(label=most_negative, value=f"{metrics_df.loc[most_negative, 'Negative (%)']:.1f}%")
 
     except pd.errors.ParserError:
         st.error("⚠️ Invalid CSV format. Please upload a properly formatted CSV file.")
