@@ -14,8 +14,7 @@ def init_models():
         "GPT-4": openai_client,
         "GPT-3.5": openai_client,
         "GPT-4 Mini": openai_client,
-        "Gemini 1.5": genai.GenerativeModel('gemini-1.5-flash'),
-        "Gemini 2.0" Flash: genai.GenerativeModel('gemini-2.0-flash')
+        "Gemini 1.5": genai.GenerativeModel('gemini-1.5-flash')
     }
 
 def parse_response(response):
@@ -73,7 +72,7 @@ def analyze_sentiment(text, model, model_type):
             )
             return response.choices[0].message.content
 
-        elif model_type in ["Gemini 1.5", "Gemini 2.0 Flash"]:
+        elif model_type == "Gemini 1.5":
             response = model.generate_content(
                 f"""Analyze sentiment and extract:
                 - Sentiment classification
@@ -116,7 +115,7 @@ if uploaded_file:
 
         if st.button("Run Analysis", type="primary"):
             models = init_models()
-            model_order = ["GPT-4", "GPT-3.5", "GPT-4 Mini", "Gemini 1.5", "Gemini 2.0"]
+            model_order = ["GPT-4", "GPT-3.5", "GPT-4 Mini", "Gemini 1.5"]
             analysis_data = {model: {'sentiments': [], 'positives': [], 'improvements': []} 
                            for model in model_order}
             with st.status("Analyzing feedback...", expanded=True) as status:
