@@ -26,14 +26,26 @@ def parse_response(response):
     }
     try:
         lines = [line.strip() for line in response.split('\n') if line.strip()]
+        if not lines:
+            return result
+            
         # Extract sentiment from first line
         first_line = lines[0].lower()
-        if 'positive' in first_line:
+        # Check for exact sentiment terms
+        if any(term in first_line for term in ['positive', 'good', 'favorable']):
             result['sentiment'] = 'Positive'
-        elif 'negative' in first_line:
+        elif any(term in first_line for term in ['negative', 'bad', 'poor']):
             result['sentiment'] = 'Negative'
-        elif 'neutral' in first_line:
+        elif any(term in first_line for term in ['neutral', 'balanced', 'mixed']):
             result['sentiment'] = 'Neutral'
+        # Check for sentiment indicators in entire response
+        elif any("sentiment: positive" in line.lower() for line in lines):
+            result['sentiment'] = 'Positive'
+        elif any("sentiment: negative" in line.lower() for line in lines):
+            result['sentiment'] = 'Negative'
+        elif any("sentiment: neutral" in line.lower() for line in lines):
+            result['sentiment'] = 'Neutral'
+            
         # Extract positives and improvements
         section = None
         for line in lines[1:]:
@@ -157,6 +169,7 @@ if uploaded_file:
             # Display results table
             st.subheader("Model Comparison Results")
             results_df = pd.DataFrame(results).set_index("Model")
+            results_df = results_df.head(4)
             st.dataframe(
                 results_df.style.set_properties(**{
                     'white-space': 'pre-wrap',
